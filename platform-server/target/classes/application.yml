@@ -1,0 +1,34 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: platform-server
+  datasource:
+    url: jdbc:h2:mem:platform;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  mvc:
+    async:
+      request-timeout: -1
+
+platform:
+  # 控制面与运行面共享的静态服务令牌（Bearer）
+  runtime-token: ${RUNTIME_TOKEN:platform-runtime-token}
+  agent-runtime-base-url: ${AGENT_RUNTIME_URL:http://localhost:8001}
+  rag-service-base-url: ${RAG_SERVICE_URL:http://localhost:8002}
+  # Run 超时兜底阈值（分钟）
+  run-timeout-minutes: 10
+
+logging:
+  level:
+    com.example.aip: INFO

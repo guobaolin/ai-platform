@@ -1,0 +1,90 @@
+openapi: 3.0.3
+info:
+  title: RAG Vectorization Service（运行面）
+  version: 1.0.0
+  description: >
+    Python FastAPI 实现。负责解析/分段/嵌入/写向量库/检索。
+    不持有业务表；完成后通过控制面 inner API 回报结果。
+    鉴权：Authorization: Bearer <RUNTIME_TOKEN>。
+servers:
+  - url: http://localhost:8002
+paths:
+  /v1/health:
+    get:
+      responses: { "200": { description: OK } }
+  /v1/index-jobs:
+    post:
+      summary: 提交索引任务（异步，202）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIndexJobRequest"
+      responses:
+        "202": { description: 已受理 }
+  /v1/index-jobs/{jobId}:
+    get:
+      summary: 查询作业受理状态（文档级状态以控制面 DB 为准）
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId: { type: string }
+                  status: { type: string, enum: [ACCEPTED, RUNNING, DONE, ERROR] }
+  /v1/retrieval:
+    post:
+      summary: 知识库检索（同步）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetrievalRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items: { $ref: "#/components/schemas/RetrievalChunk" }
+components:
+  schemas:
+    CreateIndexJobRequest:
+      type: object
+      required: [jobId, datasetId, documentIds, embeddingProfile]
+      properties:
+        jobId: { type: string, description: 控制面预生成 }
+        datasetId: { type: string }
+        documentIds:
+          type: array
+          items: { type: string }
+        embeddingProfile:
+          type: object
+          properties:
+            provider: { type: string, example: hash-v1 }
+            dim: { type: integer, example: 64 }
+        chunkSize: { type: integer, default: 500 }
+        chunkOverlap: { type: integer, default: 50 }
+    RetrievalRequest:
+      type: object
+      required: [datasetId, query]
+      properties:
+        datasetId: { type: string }
+        query: { type: string }
+        topK: { type: integer, default: 3 }
+    RetrievalChunk:
+      type: object
+      properties:
+        documentId: { type: string }
+        segmentId: { type: string }
+        content: { type: string }
+        score: { type: number }

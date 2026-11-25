@@ -1,0 +1,87 @@
+openapi: 3.0.3
+info:
+  title: Agent Runtime Service（运行面）
+  version: 1.0.0
+  description: >
+    Python FastAPI 实现。无业务库、无状态（除执行中的内存任务）。
+    鉴权：Authorization: Bearer <RUNTIME_TOKEN>（与 Java 控制面共享的静态服务令牌）。
+servers:
+  - url: http://localhost:8001
+paths:
+  /v1/health:
+    get:
+      summary: 健康检查
+      responses:
+        "200":
+          description: OK
+  /v1/runs:
+    post:
+      summary: 提交一次 Agent 运行（异步，立即返回 202）
+      description: 只传 ID 与用户输入；配置由运行面回查控制面 inner API 获取。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRunRequest"
+      responses:
+        "202":
+          description: 已受理
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunRef"
+        "401": { description: 令牌无效 }
+        "409": { description: runId 已存在（幂等拒绝） }
+  /v1/runs/{runId}:
+    get:
+      summary: 查询运行受理状态（终态以控制面 DB 为准）
+      parameters:
+        - $ref: "#/components/parameters/runId"
+      responses:
+        "200":
+          description: 状态
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunStatus"
+  /v1/runs/{runId}/cancel:
+    post:
+      summary: 请求取消（运行面订阅 Redis 命令通道，此端点为直接快速路径）
+      parameters:
+        - $ref: "#/components/parameters/runId"
+      responses:
+        "200": { description: 已接受取消请求 }
+components:
+  parameters:
+    runId:
+      name: runId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+  schemas:
+    CreateRunRequest:
+      type: object
+      required: [runId, appId, tenantId, userId, query]
+      properties:
+        runId: { type: string, format: uuid, description: 控制面预生成，全链路唯一键 }
+        appId: { type: string }
+        tenantId: { type: string }
+        userId: { type: string }
+        query: { type: string, description: 用户输入 }
+        fileKeys:
+          type: array
+          items: { type: string }
+          description: 对象存储 key，不传字节
+    RunRef:
+      type: object
+      properties:
+        runId: { type: string }
+        status: { type: string, example: ACCEPTED }
+    RunStatus:
+      type: object
+      properties:
+        runId: { type: string }
+        status: { type: string, enum: [ACCEPTED, RUNNING, FINISHED, ERROR, CANCELLED] }

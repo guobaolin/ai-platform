@@ -1,0 +1,10 @@
+# 本地开发依赖栈。原型阶段 Java 用 H2、向量库用进程内存，
+# 因此仅需 Redis（事件总线 + 命令通道）。生产化时再补 postgres/minio/milvus。
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s

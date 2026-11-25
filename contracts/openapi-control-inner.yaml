@@ -1,0 +1,102 @@
+openapi: 3.0.3
+info:
+  title: Control Plane Inner API（Java 控制面，仅供运行面调用）
+  version: 1.0.0
+  description: >
+    Java platform-server 实现，仅内网可达。鉴权：Authorization: Bearer <RUNTIME_TOKEN>。
+    原则：凭据不外发（LLM 走代理）、配置回查、索引结果回报。
+servers:
+  - url: http://localhost:8080
+paths:
+  /inner/apps/{appId}/config:
+    get:
+      summary: 拉取应用运行配置
+      parameters:
+        - { name: appId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppConfig"
+        "404": { description: 应用不存在 }
+  /inner/llm/invoke:
+    post:
+      summary: LLM 代理调用（SSE 流式返回 token）
+      description: 模型凭据只存在于控制面；provider=mock 时控制面直接生成确定性流式回复，便于无 Key 联调。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LlmInvokeRequest"
+      responses:
+        "200":
+          description: "SSE 流：每事件 data 为 {\"text\":\"...\"}；最后一个事件 data 为 [DONE]"
+          content:
+            text/event-stream:
+              schema: { type: string }
+  /inner/documents/{documentId}/index-result:
+    post:
+      summary: 索引结果回报（rag-service → 控制面，幂等）
+      parameters:
+        - { name: documentId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IndexResult"
+      responses:
+        "200": { description: 已记录 }
+  /inner/files:
+    get:
+      summary: 按对象存储 key 拉文件内容（原型期直接返回文本）
+      parameters:
+        - { name: key, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          content:
+            text/plain: { schema: { type: string } }
+components:
+  schemas:
+    AppConfig:
+      type: object
+      properties:
+        appId: { type: string }
+        name: { type: string }
+        modelConfig:
+          type: object
+          properties:
+            provider: { type: string, example: mock }
+            model: { type: string, example: mock-gpt }
+            temperature: { type: number, default: 0.7 }
+        systemPrompt: { type: string }
+        tools:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              description: { type: string }
+    LlmInvokeRequest:
+      type: object
+      required: [appId, messages]
+      properties:
+        appId: { type: string }
+        runId: { type: string, description: 用于控制面把 USAGE 与 run 关联 }
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              role: { type: string, enum: [system, user, assistant, tool] }
+              content: { type: string }
+    IndexResult:
+      type: object
+      required: [jobId, status]
+      properties:
+        jobId: { type: string }
+        status: { type: string, enum: [completed, error] }
+        segmentCount: { type: integer }
+        error: { type: string }
